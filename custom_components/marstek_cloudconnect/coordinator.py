@@ -4,6 +4,7 @@ import asyncio
 import logging
 import re
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -19,6 +20,7 @@ from .const import (
     CONF_PROFILES_PATH,
     DEFAULT_PROFILES_PATH,
     DEFAULT_SCAN_INTERVAL,
+    LEGACY_PROFILES_PATHS,
 )
 from .models import CloudDevice
 from .parser.command_builder import build_command_payload
@@ -40,6 +42,7 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
         self.api = api
         self.transport: MarstekCloudTransport | None = None
         self._bms_poll_task: asyncio.Task | None = None
+        self._active_profiles_path: str | None = None
 
         scan_interval = int(entry.options.get("scan_interval", DEFAULT_SCAN_INTERVAL))
         super().__init__(
@@ -75,12 +78,7 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
         )
 
         if transport_enabled:
-            profiles_path = str(
-                self.entry.options.get(
-                    CONF_PROFILES_PATH,
-                    self.entry.data.get(CONF_PROFILES_PATH, DEFAULT_PROFILES_PATH),
-                )
-            )
+            profiles_path = self._resolve_profiles_path()
             await self._async_start_transport(devices, profiles_path)
             self._ensure_bms_poll_task()
         else:
@@ -90,6 +88,10 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
 
     async def async_shutdown(self) -> None:
         await self._async_stop_transport()
+
+    @property
+    def active_profiles_path(self) -> str | None:
+        return self._active_profiles_path
 
     def handle_transport_message(self, topic: str, payload: str) -> None:
         target = self._find_device_by_topic(topic)
@@ -136,6 +138,35 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
             await self.transport.async_start(devices, profiles_path)
         except Exception as err:  # pragma: no cover - external IO
             _LOGGER.warning("Transport start failed: %s", err)
+
+    def _resolve_profiles_path(self) -> str:
+        configured = str(
+            self.entry.options.get(
+                CONF_PROFILES_PATH,
+                self.entry.data.get(CONF_PROFILES_PATH, DEFAULT_PROFILES_PATH),
+            )
+        )
+
+        candidates = [configured]
+        if configured != DEFAULT_PROFILES_PATH:
+            candidates.append(DEFAULT_PROFILES_PATH)
+        for legacy in LEGACY_PROFILES_PATHS:
+            if legacy not in candidates:
+                candidates.append(legacy)
+
+        for candidate in candidates:
+            if Path(candidate).exists():
+                if candidate != configured:
+                    _LOGGER.info(
+                        "Using broker profiles at %s because %s was not found",
+                        candidate,
+                        configured,
+                    )
+                self._active_profiles_path = candidate
+                return candidate
+
+        self._active_profiles_path = configured
+        return configured
 
     async def _async_stop_transport(self) -> None:
         await self._async_stop_bms_poll_task()

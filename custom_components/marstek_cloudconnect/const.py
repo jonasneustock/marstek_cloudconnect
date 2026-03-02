@@ -15,6 +15,11 @@ CONF_PROFILES_PATH = "profiles_path"
 DEFAULT_BASE_URL = "https://eu.hamedata.com"
 DEFAULT_SCAN_INTERVAL = 120
 DEFAULT_PROFILES_PATH = "/config/marstek_cloudconnect/broker_profiles.json"
+LEGACY_PROFILES_PATHS = (
+    "/config/hame-relay/brokers.json",
+    "/config/hame_relay/brokers.json",
+    "/config/addons_config/hame_relay/brokers.json",
+)
 MIN_SCAN_INTERVAL = 30
 BMS_POLL_INTERVAL_SECONDS = 60
 

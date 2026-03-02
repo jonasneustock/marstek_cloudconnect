@@ -36,5 +36,6 @@ async def async_get_config_entry_diagnostics(
             }
             for device_id, device in coordinator.data.items()
         },
+        "active_profiles_path": coordinator.active_profiles_path,
         "last_update_success": coordinator.last_update_success,
     }

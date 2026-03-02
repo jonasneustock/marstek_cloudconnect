@@ -62,8 +62,19 @@ The integration now supports the real Hame cloud broker flow with certificate-ba
 }
 ```
 
+If you want the exact `hame-relay` baseline for `hame-2025`, copy `broker_profiles.example.json` from this repository to `/config/marstek_cloudconnect/broker_profiles.json` and then add your cert/key/url files.
+
 4. In integration options, enable `Enable cloud MQTT transport`.
 5. Keep `Broker profiles path` set to `/config/marstek_cloudconnect/broker_profiles.json` unless you use a custom path.
+
+You can also directly reuse an existing `hame-relay` broker config file (for example `/config/hame-relay/brokers.json`).
+The integration supports the same `@file` reference style used there, including `url`, `ca`, `cert`, `key`, and `topic_encryption_key`.
+If the configured path is missing, the integration automatically tries these fallback paths:
+
+- `/config/marstek_cloudconnect/broker_profiles.json`
+- `/config/hame-relay/brokers.json`
+- `/config/hame_relay/brokers.json`
+- `/config/addons_config/hame_relay/brokers.json`
 
 Notes:
 - `mailbox` means your app email address.

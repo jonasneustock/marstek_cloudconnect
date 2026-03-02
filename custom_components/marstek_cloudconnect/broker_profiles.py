@@ -47,7 +47,7 @@ def load_broker_profiles(file_path: str) -> dict[str, BrokerConnectionProfile]:
         if not isinstance(raw, dict):
             raise BrokerProfilesError(f"Broker profile '{broker_id}' must be an object")
 
-        url = _expect_str(raw, "url", broker_id)
+        url = _resolve_string_value(raw, "url", broker_id, base_dir)
         ca_file = _resolve_secret_file(raw, broker_id, base_dir, "ca_file", "ca")
         cert_file = _resolve_secret_file(raw, broker_id, base_dir, "cert_file", "cert")
         key_file = _resolve_secret_file(raw, broker_id, base_dir, "key_file", "key")
@@ -58,14 +58,13 @@ def load_broker_profiles(file_path: str) -> dict[str, BrokerConnectionProfile]:
         )
 
         topic_key = _read_optional_str(raw, "topic_encryption_key")
-        if topic_key and topic_key.startswith("@"):
-            topic_key_path = _resolve_path(base_dir, topic_key[1:])
-            try:
-                topic_key = topic_key_path.read_text(encoding="utf-8").strip()
-            except OSError as err:
-                raise BrokerProfilesError(
-                    f"Broker profile '{broker_id}' topic encryption key file not readable: {topic_key_path}"
-                ) from err
+        if topic_key is not None:
+            topic_key = _resolve_inline_file_reference(
+                topic_key,
+                base_dir,
+                broker_id,
+                "topic_encryption_key",
+            )
 
         profiles[broker_id] = BrokerConnectionProfile(
             broker_id=broker_id,
@@ -90,7 +89,7 @@ def _resolve_secret_file(
 ) -> Path:
     file_value = _read_optional_str(raw, file_key)
     if file_value:
-        path = _resolve_path(base_dir, file_value)
+        path = _resolve_path(base_dir, file_value[1:] if file_value.startswith("@") else file_value)
     else:
         legacy_value = _read_optional_str(raw, fallback_key)
         if not legacy_value:
@@ -117,6 +116,24 @@ def _expect_str(raw: dict, key: str, broker_id: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise BrokerProfilesError(f"Broker profile '{broker_id}' is missing '{key}'")
     return value.strip()
+
+
+def _resolve_string_value(raw: dict, key: str, broker_id: str, base_dir: Path) -> str:
+    value = _expect_str(raw, key, broker_id)
+    return _resolve_inline_file_reference(value, base_dir, broker_id, key)
+
+
+def _resolve_inline_file_reference(value: str, base_dir: Path, broker_id: str, field_name: str) -> str:
+    if not value.startswith("@"):
+        return value
+
+    file_path = _resolve_path(base_dir, value[1:])
+    try:
+        return file_path.read_text(encoding="utf-8").strip()
+    except OSError as err:
+        raise BrokerProfilesError(
+            f"Broker profile '{broker_id}' field '{field_name}' could not load referenced file: {file_path}"
+        ) from err
 
 
 def _read_optional_str(raw: dict, key: str) -> str | None:
