@@ -1,0 +1,70 @@
+name: Build HACS release package
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate required secrets
+        env:
+          CA_CERTIFICATE: ${{ secrets.CA_CERTIFICATE }}
+          CLIENT_CERTIFICATE_2025: ${{ secrets.CLIENT_CERTIFICATE_2025 }}
+          CLIENT_KEY_2025: ${{ secrets.CLIENT_KEY_2025 }}
+          HAME_2025_URL: ${{ secrets.HAME_2025_URL }}
+          TOPIC_ENCRYPTION_KEY_2025: ${{ secrets.TOPIC_ENCRYPTION_KEY_2025 }}
+        run: |
+          set -euo pipefail
+          for name in CA_CERTIFICATE CLIENT_CERTIFICATE_2025 CLIENT_KEY_2025 HAME_2025_URL TOPIC_ENCRYPTION_KEY_2025; do
+            if [ -z "${!name}" ]; then
+              echo "Missing required secret: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Write cert material into integration package
+        env:
+          CA_CERTIFICATE: ${{ secrets.CA_CERTIFICATE }}
+          CLIENT_CERTIFICATE_2025: ${{ secrets.CLIENT_CERTIFICATE_2025 }}
+          CLIENT_KEY_2025: ${{ secrets.CLIENT_KEY_2025 }}
+          HAME_2025_URL: ${{ secrets.HAME_2025_URL }}
+          TOPIC_ENCRYPTION_KEY_2025: ${{ secrets.TOPIC_ENCRYPTION_KEY_2025 }}
+        run: |
+          set -euo pipefail
+          mkdir -p custom_components/marstek_cloudconnect/certs
+          printf '%s' "$CA_CERTIFICATE" > custom_components/marstek_cloudconnect/certs/ca.crt
+          printf '%s' "$CLIENT_CERTIFICATE_2025" > custom_components/marstek_cloudconnect/certs/hame-2025.crt
+          printf '%s' "$CLIENT_KEY_2025" > custom_components/marstek_cloudconnect/certs/hame-2025.key
+          printf '%s' "$HAME_2025_URL" > custom_components/marstek_cloudconnect/certs/hame-2025-url
+          printf '%s' "$TOPIC_ENCRYPTION_KEY_2025" > custom_components/marstek_cloudconnect/certs/hame-2025-topic-encryption-key
+
+      - name: Build release zip
+        run: |
+          set -euo pipefail
+          rm -f marstek_cloudconnect.zip
+          zip -r marstek_cloudconnect.zip custom_components
+
+      - name: Upload zip to GitHub release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: marstek_cloudconnect.zip
+          fail_on_unmatched_files: true
+          overwrite_files: true
+
+      - name: Upload zip as workflow artifact
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: marstek_cloudconnect
+          path: marstek_cloudconnect.zip

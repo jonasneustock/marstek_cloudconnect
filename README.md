@@ -73,6 +73,21 @@ If those direct cert directories do not contain all files, the integration also 
 - `/config`
 - `/addon_configs`
 
+## HACS Direct Distribution
+
+For direct HACS distribution with bundled cert files, releases are packaged via GitHub Actions.
+The workflow `.github/workflows/release-package.yml` injects cert material into
+`custom_components/marstek_cloudconnect/certs` during release build and uploads
+`marstek_cloudconnect.zip`.
+
+Required repository secrets:
+
+- `CA_CERTIFICATE`
+- `CLIENT_CERTIFICATE_2025`
+- `CLIENT_KEY_2025`
+- `HAME_2025_URL`
+- `TOPIC_ENCRYPTION_KEY_2025`
+
 Notes:
 - `mailbox` means your app email address.
 - Broker username/password is not used for cloud transport.
