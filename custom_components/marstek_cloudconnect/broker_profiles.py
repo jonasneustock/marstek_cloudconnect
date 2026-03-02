@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+from typing import Sequence
 
 from .brokers import default_client_id_prefix_for_broker, default_topic_prefix_for_broker
 
@@ -21,6 +22,59 @@ class BrokerConnectionProfile:
     topic_prefix: str
     client_id_prefix: str
     topic_encryption_key: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ProfilesBootstrapResult:
+    profiles_path: str
+    auto_generated: bool
+    generation_source: str | None
+    error: str | None
+
+
+def resolve_or_generate_profiles_path(
+    configured_path: str,
+    fallback_paths: Sequence[str],
+    cert_search_dirs: Sequence[str],
+    cert_discovery_roots: Sequence[str],
+) -> ProfilesBootstrapResult:
+    candidates = _unique_paths([configured_path, *fallback_paths])
+    for candidate in candidates:
+        path = Path(candidate).expanduser()
+        if path.exists() and path.is_file():
+            return ProfilesBootstrapResult(
+                profiles_path=str(path),
+                auto_generated=False,
+                generation_source=None,
+                error=None,
+            )
+
+    unique_cert_dirs = _unique_paths(list(cert_search_dirs))
+
+    generated = _try_generate_hame2025_profile_file(
+        configured_path,
+        unique_cert_dirs,
+        cert_discovery_roots,
+    )
+    if generated is not None:
+        generated_path, source = generated
+        return ProfilesBootstrapResult(
+            profiles_path=generated_path,
+            auto_generated=True,
+            generation_source=source,
+            error=None,
+        )
+
+    return ProfilesBootstrapResult(
+        profiles_path=configured_path,
+        auto_generated=False,
+        generation_source=None,
+        error=_build_generation_error(
+            configured_path,
+            unique_cert_dirs,
+            cert_discovery_roots,
+        ),
+    )
 
 
 def load_broker_profiles(file_path: str) -> dict[str, BrokerConnectionProfile]:
@@ -144,3 +198,141 @@ def _read_optional_str(raw: dict, key: str) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _try_generate_hame2025_profile_file(
+    configured_path: str,
+    cert_search_dirs: Sequence[str],
+    cert_discovery_roots: Sequence[str],
+) -> tuple[str, str] | None:
+    cert_files = {
+        "url": "hame-2025-url",
+        "ca_file": "ca.crt",
+        "cert_file": "hame-2025.crt",
+        "key_file": "hame-2025.key",
+        "topic_encryption_key": "hame-2025-topic-encryption-key",
+    }
+
+    for cert_root in cert_search_dirs:
+        cert_dir = Path(cert_root).expanduser()
+        if not cert_dir.exists() or not cert_dir.is_dir():
+            continue
+
+        resolved = _resolve_cert_files_from_directory(cert_dir, cert_files)
+        if resolved is None:
+            continue
+
+        generated = _write_generated_profile(configured_path, resolved)
+        if generated is not None:
+            output_path, _ = generated
+            return output_path, str(cert_dir)
+
+    discovered = _discover_cert_files(cert_files, cert_discovery_roots)
+    if discovered is not None:
+        generated = _write_generated_profile(configured_path, discovered)
+        if generated is not None:
+            output_path, source = generated
+            return output_path, source
+
+    return None
+
+
+def _resolve_cert_files_from_directory(
+    cert_dir: Path,
+    cert_files: dict[str, str],
+) -> dict[str, Path] | None:
+    resolved = {key: cert_dir / file_name for key, file_name in cert_files.items()}
+    if any(not path.is_file() for path in resolved.values()):
+        return None
+    return resolved
+
+
+def _discover_cert_files(
+    cert_files: dict[str, str],
+    cert_discovery_roots: Sequence[str],
+) -> dict[str, Path] | None:
+    resolved: dict[str, Path] = {}
+
+    for root_str in cert_discovery_roots:
+        root = Path(root_str).expanduser()
+        if not root.exists() or not root.is_dir():
+            continue
+
+        for key, file_name in cert_files.items():
+            if key in resolved:
+                continue
+            found = _find_first_file(root, file_name)
+            if found is not None:
+                resolved[key] = found
+
+        if len(resolved) == len(cert_files):
+            return resolved
+
+    return None
+
+
+def _find_first_file(root: Path, file_name: str) -> Path | None:
+    for candidate in root.rglob(file_name):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _write_generated_profile(
+    configured_path: str,
+    resolved: dict[str, Path],
+) -> tuple[str, str] | None:
+    try:
+        url_value = resolved["url"].read_text(encoding="utf-8").strip()
+        topic_key_value = resolved["topic_encryption_key"].read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+
+    if not url_value or not topic_key_value:
+        return None
+
+    profile_payload = {
+        "hame-2025": {
+            "url": url_value,
+            "ca_file": str(resolved["ca_file"].resolve()),
+            "cert_file": str(resolved["cert_file"].resolve()),
+            "key_file": str(resolved["key_file"].resolve()),
+            "topic_prefix": "marstek_energy/",
+            "client_id_prefix": "mst_",
+            "topic_encryption_key": topic_key_value,
+        }
+    }
+
+    output_path = Path(configured_path).expanduser()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(profile_payload, indent=2) + "\n", encoding="utf-8")
+
+    source = str(Path(resolved["ca_file"]).parent)
+    return str(output_path), source
+
+
+def _build_generation_error(
+    configured_path: str,
+    cert_search_dirs: Sequence[str],
+    cert_discovery_roots: Sequence[str],
+) -> str:
+    checked = ", ".join(cert_search_dirs)
+    discovery = ", ".join(cert_discovery_roots)
+    return (
+        f"Broker profiles file not found: {configured_path}. "
+        "Auto-generation requires hame-2025 files in one of these directories: "
+        f"{checked}. It also scans recursively in: {discovery}. "
+        "Required files: hame-2025-url, ca.crt, hame-2025.crt, hame-2025.key, "
+        "hame-2025-topic-encryption-key."
+    )
+
+
+def _unique_paths(paths: Sequence[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for path in paths:
+        if path in seen:
+            continue
+        seen.add(path)
+        unique.append(path)
+    return unique

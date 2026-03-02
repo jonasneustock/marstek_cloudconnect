@@ -4,7 +4,6 @@ import asyncio
 import logging
 import re
 from datetime import timedelta
-from pathlib import Path
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -13,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import MarstekApiClient, MarstekApiError
+from .broker_profiles import resolve_or_generate_profiles_path
 from .const import (
     BMS_POLL_INTERVAL_SECONDS,
     CONF_ENABLE_TRANSPORT,
@@ -20,6 +20,8 @@ from .const import (
     CONF_PROFILES_PATH,
     DEFAULT_PROFILES_PATH,
     DEFAULT_SCAN_INTERVAL,
+    HAME2025_CERT_DISCOVERY_ROOTS,
+    HAME2025_CERT_SEARCH_DIRS,
     LEGACY_PROFILES_PATHS,
 )
 from .models import CloudDevice
@@ -43,6 +45,9 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
         self.transport: MarstekCloudTransport | None = None
         self._bms_poll_task: asyncio.Task | None = None
         self._active_profiles_path: str | None = None
+        self._profiles_auto_generated = False
+        self._profiles_generation_source: str | None = None
+        self._profiles_bootstrap_error: str | None = None
 
         scan_interval = int(entry.options.get("scan_interval", DEFAULT_SCAN_INTERVAL))
         super().__init__(
@@ -92,6 +97,18 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
     @property
     def active_profiles_path(self) -> str | None:
         return self._active_profiles_path
+
+    @property
+    def profiles_auto_generated(self) -> bool:
+        return self._profiles_auto_generated
+
+    @property
+    def profiles_generation_source(self) -> str | None:
+        return self._profiles_generation_source
+
+    @property
+    def profiles_bootstrap_error(self) -> str | None:
+        return self._profiles_bootstrap_error
 
     def handle_transport_message(self, topic: str, payload: str) -> None:
         target = self._find_device_by_topic(topic)
@@ -147,26 +164,35 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
             )
         )
 
-        candidates = [configured]
-        if configured != DEFAULT_PROFILES_PATH:
-            candidates.append(DEFAULT_PROFILES_PATH)
-        for legacy in LEGACY_PROFILES_PATHS:
-            if legacy not in candidates:
-                candidates.append(legacy)
+        fallbacks = [DEFAULT_PROFILES_PATH, *LEGACY_PROFILES_PATHS]
+        result = resolve_or_generate_profiles_path(
+            configured_path=configured,
+            fallback_paths=fallbacks,
+            cert_search_dirs=HAME2025_CERT_SEARCH_DIRS,
+            cert_discovery_roots=HAME2025_CERT_DISCOVERY_ROOTS,
+        )
 
-        for candidate in candidates:
-            if Path(candidate).exists():
-                if candidate != configured:
-                    _LOGGER.info(
-                        "Using broker profiles at %s because %s was not found",
-                        candidate,
-                        configured,
-                    )
-                self._active_profiles_path = candidate
-                return candidate
+        self._active_profiles_path = result.profiles_path
+        self._profiles_auto_generated = result.auto_generated
+        self._profiles_generation_source = result.generation_source
+        self._profiles_bootstrap_error = result.error
 
-        self._active_profiles_path = configured
-        return configured
+        if result.error:
+            _LOGGER.warning("%s", result.error)
+        elif result.auto_generated and result.generation_source:
+            _LOGGER.info(
+                "Auto-generated broker profiles at %s from cert directory %s",
+                result.profiles_path,
+                result.generation_source,
+            )
+        elif result.profiles_path != configured:
+            _LOGGER.info(
+                "Using broker profiles at %s because %s was not found",
+                result.profiles_path,
+                configured,
+            )
+
+        return result.profiles_path
 
     async def _async_stop_transport(self) -> None:
         await self._async_stop_bms_poll_task()

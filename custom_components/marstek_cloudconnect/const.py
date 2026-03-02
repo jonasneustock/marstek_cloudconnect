@@ -20,6 +20,17 @@ LEGACY_PROFILES_PATHS = (
     "/config/hame_relay/brokers.json",
     "/config/addons_config/hame_relay/brokers.json",
 )
+HAME2025_CERT_SEARCH_DIRS = (
+    "/config/custom_components/marstek_cloudconnect/certs",
+    "/config/marstek_cloudconnect/certs",
+    "/config/hame-relay/certs",
+    "/config/hame_relay/certs",
+    "/config/addons_config/hame_relay/certs",
+)
+HAME2025_CERT_DISCOVERY_ROOTS = (
+    "/config",
+    "/addon_configs",
+)
 MIN_SCAN_INTERVAL = 30
 BMS_POLL_INTERVAL_SECONDS = 60
 
