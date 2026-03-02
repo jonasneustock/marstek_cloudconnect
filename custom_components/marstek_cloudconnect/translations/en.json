@@ -9,9 +9,7 @@
           "password": "Password",
           "base_url": "API Base URL",
           "enable_transport": "Enable cloud MQTT transport",
-          "broker_url": "Broker URL",
-          "broker_username": "Broker username",
-          "broker_password": "Broker password"
+          "profiles_path": "Broker profiles path"
         }
       }
     },
@@ -31,9 +29,7 @@
         "data": {
           "scan_interval": "Scan interval (seconds)",
           "enable_transport": "Enable cloud MQTT transport",
-          "broker_url": "Broker URL",
-          "broker_username": "Broker username",
-          "broker_password": "Broker password"
+          "profiles_path": "Broker profiles path"
         }
       }
     }
@@ -58,8 +54,32 @@
       "combined_power": {
         "name": "Combined power"
       },
+      "pv1_power": {
+        "name": "PV1 power"
+      },
+      "pv2_power": {
+        "name": "PV2 power"
+      },
+      "pv3_power": {
+        "name": "PV3 power"
+      },
+      "pv4_power": {
+        "name": "PV4 power"
+      },
+      "solar_total_power": {
+        "name": "Solar total power"
+      },
       "battery_soc": {
         "name": "Battery SOC"
+      },
+      "battery_power": {
+        "name": "Battery power"
+      },
+      "battery_voltage": {
+        "name": "Battery voltage"
+      },
+      "battery_current": {
+        "name": "Battery current"
       },
       "phase1_power": {
         "name": "Phase 1 power"

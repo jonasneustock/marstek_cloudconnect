@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-from datetime import timedelta
 import re
+from datetime import timedelta
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD
@@ -10,7 +12,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import MarstekApiClient, MarstekApiError
-from .const import CONF_ENABLE_TRANSPORT, CONF_MAILBOX, DEFAULT_SCAN_INTERVAL
+from .const import (
+    BMS_POLL_INTERVAL_SECONDS,
+    CONF_ENABLE_TRANSPORT,
+    CONF_MAILBOX,
+    CONF_PROFILES_PATH,
+    DEFAULT_PROFILES_PATH,
+    DEFAULT_SCAN_INTERVAL,
+)
 from .models import CloudDevice
 from .parser.command_builder import build_command_payload
 from .parser.device_parser import parse_payload
@@ -30,6 +39,7 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
         self.entry = entry
         self.api = api
         self.transport: MarstekCloudTransport | None = None
+        self._bms_poll_task: asyncio.Task | None = None
 
         scan_interval = int(entry.options.get("scan_interval", DEFAULT_SCAN_INTERVAL))
         super().__init__(
@@ -58,26 +68,28 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
                 device.last_topic = old.last_topic
                 device.last_update = old.last_update
                 device.available = old.available
+                _derive_device_metrics(device)
 
         transport_enabled = bool(
             self.entry.options.get(CONF_ENABLE_TRANSPORT, self.entry.data.get(CONF_ENABLE_TRANSPORT, False))
         )
+
         if transport_enabled:
-            if self.transport is None:
-                self.transport = MarstekCloudTransport(
-                    self.hass,
-                    self.entry.options if self.entry.options else self.entry.data,
-                    self.handle_transport_message,
+            profiles_path = str(
+                self.entry.options.get(
+                    CONF_PROFILES_PATH,
+                    self.entry.data.get(CONF_PROFILES_PATH, DEFAULT_PROFILES_PATH),
                 )
-                await self.transport.async_start(devices)
-            elif not previous:
-                await self.transport.async_start(devices)
+            )
+            await self._async_start_transport(devices, profiles_path)
+            self._ensure_bms_poll_task()
+        else:
+            await self._async_stop_transport()
 
         return {device.device_id: device for device in devices}
 
     async def async_shutdown(self) -> None:
-        if self.transport is not None:
-            await self.transport.async_stop()
+        await self._async_stop_transport()
 
     def handle_transport_message(self, topic: str, payload: str) -> None:
         target = self._find_device_by_topic(topic)
@@ -88,6 +100,7 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
         raw_values, parsed = parse_payload(target.device_type, payload)
         target.raw_values.update(raw_values)
         target.telemetry.update(parsed)
+        _derive_device_metrics(target)
         target.mark_message(topic=topic, payload=payload)
         self.async_set_updated_data(dict(self.data))
 
@@ -95,7 +108,7 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
         self,
         device_id: str,
         command: str,
-        value: str | int | bool | None = None,
+        value: str | int | bool | dict[str, Any] | None = None,
     ) -> None:
         device = self.data.get(device_id)
         if device is None:
@@ -115,6 +128,59 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
         self._apply_optimistic_state(device, command, value)
         self.async_set_updated_data(dict(self.data))
 
+    async def _async_start_transport(self, devices: list[CloudDevice], profiles_path: str) -> None:
+        if self.transport is None:
+            self.transport = MarstekCloudTransport(self.hass, self.handle_transport_message)
+
+        try:
+            await self.transport.async_start(devices, profiles_path)
+        except Exception as err:  # pragma: no cover - external IO
+            _LOGGER.warning("Transport start failed: %s", err)
+
+    async def _async_stop_transport(self) -> None:
+        await self._async_stop_bms_poll_task()
+
+        if self.transport is None:
+            return
+
+        try:
+            await self.transport.async_stop()
+        finally:
+            self.transport = None
+
+    def _ensure_bms_poll_task(self) -> None:
+        if self._bms_poll_task and not self._bms_poll_task.done():
+            return
+        self._bms_poll_task = self.hass.async_create_task(self._async_bms_poll_loop())
+
+    async def _async_stop_bms_poll_task(self) -> None:
+        task = self._bms_poll_task
+        if task is None:
+            return
+        self._bms_poll_task = None
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    async def _async_bms_poll_loop(self) -> None:
+        await asyncio.sleep(5)
+        while True:
+            await self._async_poll_bms_once()
+            await asyncio.sleep(BMS_POLL_INTERVAL_SECONDS)
+
+    async def _async_poll_bms_once(self) -> None:
+        if self.transport is None:
+            return
+        for device in self.data.values():
+            if not _is_jupiter_device(device):
+                continue
+            try:
+                await self.transport.async_publish_command(device, "cd=14")
+            except Exception as err:  # pragma: no cover - external IO
+                _LOGGER.debug("BMS poll request failed for %s: %s", device.device_id, err)
+
     def _find_device_by_topic(self, topic: str) -> CloudDevice | None:
         for device in self.data.values():
             expected = f"{device.topic_prefix}{device.device_type}/device/{device.remote_id}/ctrl"
@@ -126,10 +192,10 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
         self,
         device: CloudDevice,
         command: str,
-        value: str | int | bool | None,
+        value: str | int | bool | dict[str, Any] | None,
     ) -> None:
         if command == "max-output-power":
-            device.telemetry["maximum_output_power"] = int(value) if value is not None else 0
+            device.telemetry["maximum_output_power"] = _normalize_int(value)
         elif command == "mode":
             device.telemetry["mode"] = str(value)
         elif command == "grid-connection-ban":
@@ -139,14 +205,37 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
         elif command == "surplus-feed-in":
             device.telemetry["surplus_feed_in_enabled"] = _normalize_bool(value)
         elif command == "discharge-depth":
-            device.telemetry["depth_of_discharge"] = int(value) if value is not None else 0
+            device.telemetry["depth_of_discharge"] = _normalize_int(value)
         elif command == "sync-time":
             device.telemetry["last_sync_time_command"] = True
         elif command.startswith("time-period/"):
             _apply_time_period_optimistic(device, command, value)
 
+        _derive_device_metrics(device)
 
-def _normalize_bool(value: str | int | bool | dict[str, object] | None) -> bool:
+
+def _derive_device_metrics(device: CloudDevice) -> None:
+    pv_values = []
+    for key in ("pv1_power", "pv2_power", "pv3_power", "pv4_power"):
+        value = device.telemetry.get(key)
+        if isinstance(value, (int, float)):
+            pv_values.append(float(value))
+    if pv_values:
+        device.telemetry["solar_total_power"] = int(sum(pv_values))
+
+    voltage = device.telemetry.get("battery_voltage")
+    current = device.telemetry.get("battery_current")
+    if isinstance(voltage, (int, float)) and isinstance(current, (int, float)):
+        power = float(voltage) * float(current)
+        status = device.telemetry.get("battery_working_status")
+        if status == "charging":
+            power = -abs(power)
+        elif status == "discharging":
+            power = abs(power)
+        device.telemetry["battery_power"] = round(power, 2)
+
+
+def _normalize_bool(value: str | int | bool | dict[str, Any] | None) -> bool:
     if isinstance(value, bool):
         return value
     if isinstance(value, int):
@@ -156,10 +245,27 @@ def _normalize_bool(value: str | int | bool | dict[str, object] | None) -> bool:
     return False
 
 
+def _normalize_int(value: str | int | bool | dict[str, Any] | None) -> int:
+    if isinstance(value, bool):
+        return 1 if value else 0
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+    return 0
+
+
+def _is_jupiter_device(device: CloudDevice) -> bool:
+    return any(device.device_type.startswith(prefix) for prefix in ("JPLS", "HMM", "HMN"))
+
+
 def _apply_time_period_optimistic(
     device: CloudDevice,
     command: str,
-    value: str | int | bool | dict[str, object] | None,
+    value: str | int | bool | dict[str, Any] | None,
 ) -> None:
     match = _TIME_PERIOD_COMMAND_RE.match(command)
     if not match:
@@ -205,16 +311,3 @@ def _apply_time_period_optimistic(
         period["power"] = _normalize_int(value)
     elif field == "enabled":
         period["enabled"] = _normalize_bool(value)
-
-
-def _normalize_int(value: str | int | bool | dict[str, object] | None) -> int:
-    if isinstance(value, bool):
-        return 1 if value else 0
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError:
-            return 0
-    return 0

@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from .const import DOMAIN
 from .entity import MarstekRuntimeData
 
-TO_REDACT = {CONF_PASSWORD, "broker_password"}
+TO_REDACT = {CONF_PASSWORD}
 
 
 async def async_get_config_entry_diagnostics(

@@ -32,6 +32,44 @@ The first integration release focuses on:
 6. Go to Settings -> Devices & Services -> Add Integration.
 7. Search for `Marstek Cloud Connect`.
 
+## Cloud Transport Setup (mTLS)
+
+The integration now supports the real Hame cloud broker flow with certificate-based authentication.
+
+1. Create directory `/config/marstek_cloudconnect/certs` in your Home Assistant host.
+2. Place your broker certificates and keys there (do not commit them to git).
+3. Create `/config/marstek_cloudconnect/broker_profiles.json` like this:
+
+```json
+{
+  "hame-2024": {
+    "url": "mqtts://<hame-2024-host>:8883",
+    "ca_file": "/config/marstek_cloudconnect/certs/ca.crt",
+    "cert_file": "/config/marstek_cloudconnect/certs/hame-2024.crt",
+    "key_file": "/config/marstek_cloudconnect/certs/hame-2024.key",
+    "topic_prefix": "hame_energy/",
+    "client_id_prefix": "hm_"
+  },
+  "hame-2025": {
+    "url": "mqtts://<hame-2025-host>:8883",
+    "ca_file": "/config/marstek_cloudconnect/certs/ca.crt",
+    "cert_file": "/config/marstek_cloudconnect/certs/hame-2025.crt",
+    "key_file": "/config/marstek_cloudconnect/certs/hame-2025.key",
+    "topic_prefix": "marstek_energy/",
+    "client_id_prefix": "mst_",
+    "topic_encryption_key": "<hex-key>"
+  }
+}
+```
+
+4. In integration options, enable `Enable cloud MQTT transport`.
+5. Keep `Broker profiles path` set to `/config/marstek_cloudconnect/broker_profiles.json` unless you use a custom path.
+
+Notes:
+- `mailbox` means your app email address.
+- Broker username/password is not used for cloud transport.
+- Battery power and detailed PV power values are available once transport telemetry is flowing.
+
 ## Development Notes
 
 - Integration domain: `marstek_cloudconnect`

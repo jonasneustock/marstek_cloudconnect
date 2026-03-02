@@ -46,16 +46,23 @@ def test_handle_transport_message_updates_device_state() -> None:
     topic = "marstek_energy/JPLS-1/device/remote123/ctrl"
     payload = (
         "ele_d=349,ele_m=2193,ele_y=0,pv1_p=94,pv2_p=77,pv3_p=41,pv4_p=60,"
-        "grd_d=285,grd_m=2018,grd_o=250,cel_s=0,cel_p=424,cel_c=83,err_t=0,"
+        "grd_d=285,grd_m=2018,grd_o=250,cel_s=2,cel_p=424,cel_c=83,err_t=0,"
         "wor_m=1,wif_s=75,ful_d=1,dod=88,ala_c=0,tim_0=12|0|23|59|127|800|1"
     )
 
     coordinator.handle_transport_message(topic, payload)
 
+    bms_payload = "b_vol=5252,b_cur=63"
+    coordinator.handle_transport_message(topic, bms_payload)
+
     assert device.available is True
     assert device.telemetry["daily_charging_capacity"] == pytest.approx(3.49)
     assert device.telemetry["combined_power"] == 250
     assert device.telemetry["time_periods"][0]["start_time"] == "12:00"
+    assert device.telemetry["solar_total_power"] == 272
+    assert device.telemetry["battery_voltage"] == pytest.approx(52.52)
+    assert device.telemetry["battery_current"] == pytest.approx(6.3)
+    assert device.telemetry["battery_power"] == pytest.approx(330.88)
 
 
 @pytest.mark.asyncio

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import hashlib
 
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
 
 def extract_first_salt(salt_pair: str | None) -> str:
     if not salt_pair:
@@ -50,6 +53,19 @@ def calculate_remote_id_cq(salt: str, mac: str, vid: str) -> str:
     return _code_util_encode(f"{h1}{h2}")[:24]
 
 
+def calculate_remote_id_aes(key_hex: str, mac: str) -> str:
+    key = bytes.fromhex(key_hex)
+    if len(key) != 16:
+        raise ValueError("Topic encryption key must decode to 16 bytes")
+
+    padder = padding.PKCS7(128).padder()
+    padded = padder.update(mac.encode("utf-8")) + padder.finalize()
+    cipher = Cipher(algorithms.AES(key), modes.CBC(bytes(16)))
+    encryptor = cipher.encryptor()
+    encrypted = encryptor.update(padded) + encryptor.finalize()
+    return encrypted.hex()
+
+
 def _stream_cipher_hex(data: str, key: str) -> str:
     if not data or not key:
         return ""
@@ -84,7 +100,7 @@ def _code_util_encode(content: str) -> str:
         word = words[index % 8]
         shift = (index // 8) * 8
         final[index] = (word >> shift) & 0xFF
-    return _bytes_to_custom_encoding(final)
+    return _bytes_to_custom_encoding(bytes(final))
 
 
 def _bytes_to_custom_encoding(data: bytes) -> str:

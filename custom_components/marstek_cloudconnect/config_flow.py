@@ -12,15 +12,13 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import MarstekApiClient, MarstekApiError, MarstekAuthError
 from .const import (
-    CONF_BROKER_PASSWORD,
-    CONF_BROKER_URL,
-    CONF_BROKER_USERNAME,
     CONF_BASE_URL,
     CONF_ENABLE_TRANSPORT,
     CONF_MAILBOX,
+    CONF_PROFILES_PATH,
     CONF_SCAN_INTERVAL,
-    DEFAULT_BROKER_URL,
     DEFAULT_BASE_URL,
+    DEFAULT_PROFILES_PATH,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     MIN_SCAN_INTERVAL,
@@ -56,9 +54,7 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_PASSWORD: user_input[CONF_PASSWORD],
                         CONF_BASE_URL: user_input[CONF_BASE_URL],
                         CONF_ENABLE_TRANSPORT: bool(user_input.get(CONF_ENABLE_TRANSPORT, False)),
-                        CONF_BROKER_URL: user_input.get(CONF_BROKER_URL, DEFAULT_BROKER_URL),
-                        CONF_BROKER_USERNAME: user_input.get(CONF_BROKER_USERNAME) or "",
-                        CONF_BROKER_PASSWORD: user_input.get(CONF_BROKER_PASSWORD) or "",
+                        CONF_PROFILES_PATH: user_input.get(CONF_PROFILES_PATH, DEFAULT_PROFILES_PATH),
                     },
                 )
 
@@ -68,9 +64,7 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_PASSWORD): str,
                 vol.Required(CONF_BASE_URL, default=DEFAULT_BASE_URL): str,
                 vol.Optional(CONF_ENABLE_TRANSPORT, default=False): bool,
-                vol.Optional(CONF_BROKER_URL, default=DEFAULT_BROKER_URL): str,
-                vol.Optional(CONF_BROKER_USERNAME): str,
-                vol.Optional(CONF_BROKER_PASSWORD): str,
+                vol.Optional(CONF_PROFILES_PATH, default=DEFAULT_PROFILES_PATH): str,
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
@@ -97,19 +91,21 @@ class MarstekOptionsFlow(config_entries.OptionsFlow):
                 ): vol.All(vol.Coerce(int), vol.Range(min=MIN_SCAN_INTERVAL)),
                 vol.Required(
                     CONF_ENABLE_TRANSPORT,
-                    default=bool(self._entry.options.get(CONF_ENABLE_TRANSPORT, False)),
+                    default=bool(
+                        self._entry.options.get(
+                            CONF_ENABLE_TRANSPORT,
+                            self._entry.data.get(CONF_ENABLE_TRANSPORT, False),
+                        )
+                    ),
                 ): bool,
                 vol.Required(
-                    CONF_BROKER_URL,
-                    default=str(self._entry.options.get(CONF_BROKER_URL, DEFAULT_BROKER_URL)),
-                ): str,
-                vol.Optional(
-                    CONF_BROKER_USERNAME,
-                    default=self._entry.options.get(CONF_BROKER_USERNAME, ""),
-                ): str,
-                vol.Optional(
-                    CONF_BROKER_PASSWORD,
-                    default=self._entry.options.get(CONF_BROKER_PASSWORD, ""),
+                    CONF_PROFILES_PATH,
+                    default=str(
+                        self._entry.options.get(
+                            CONF_PROFILES_PATH,
+                            self._entry.data.get(CONF_PROFILES_PATH, DEFAULT_PROFILES_PATH),
+                        )
+                    ),
                 ): str,
             }
         )

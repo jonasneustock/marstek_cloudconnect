@@ -92,32 +92,57 @@ def _parse_ct002(values: dict[str, str]) -> dict[str, object]:
 
 
 def _parse_jupiter(values: dict[str, str]) -> dict[str, object]:
-    working_mode = "automatic" if values.get("wor_m") == "1" else "manual"
     battery_status_map = {"0": "keep", "1": "charging", "2": "discharging"}
-    cel_status = values.get("cel_s", "")
-    data: dict[str, object] = {
-        "daily_charging_capacity": _to_float(values.get("ele_d")) / 100,
-        "monthly_charging_capacity": _to_float(values.get("ele_m")) / 100,
-        "yearly_charging_capacity": _to_float(values.get("ele_y")) / 100,
-        "pv1_power": _to_int(values.get("pv1_p")),
-        "pv2_power": _to_int(values.get("pv2_p")),
-        "pv3_power": _to_int(values.get("pv3_p")),
-        "pv4_power": _to_int(values.get("pv4_p")),
-        "daily_discharge_capacity": _to_float(values.get("grd_d")) / 100,
-        "monthly_discharge_capacity": _to_float(values.get("grd_m")) / 100,
-        "combined_power": _to_int(values.get("grd_o")),
-        "battery_soc": _to_int(values.get("cel_c")),
-        "battery_energy": _to_float(values.get("cel_p")) / 100,
-        "battery_working_status": battery_status_map.get(cel_status, "unknown"),
-        "error_code": _to_int(values.get("err_t")),
-        "working_mode": working_mode,
-        "wifi_signal_strength": -_to_int(values.get("wif_s")),
-        "surplus_feed_in_enabled": values.get("ful_d") == "1",
-        "depth_of_discharge": _to_int(values.get("dod")),
-        "alarm_code": _to_int(values.get("ala_c")),
-        "time_periods": _parse_jupiter_time_periods(values),
-    }
-    return {k: v for k, v in data.items() if v not in (None, "")}
+    data: dict[str, object] = {}
+
+    if "ele_d" in values:
+        data["daily_charging_capacity"] = _to_float(values.get("ele_d")) / 100
+    if "ele_m" in values:
+        data["monthly_charging_capacity"] = _to_float(values.get("ele_m")) / 100
+    if "ele_y" in values:
+        data["yearly_charging_capacity"] = _to_float(values.get("ele_y")) / 100
+
+    for key in ("pv1_p", "pv2_p", "pv3_p", "pv4_p"):
+        if key in values:
+            data[f"{key[:3]}_power"] = _to_int(values.get(key))
+
+    if "grd_d" in values:
+        data["daily_discharge_capacity"] = _to_float(values.get("grd_d")) / 100
+    if "grd_m" in values:
+        data["monthly_discharge_capacity"] = _to_float(values.get("grd_m")) / 100
+    if "grd_o" in values:
+        data["combined_power"] = _to_int(values.get("grd_o"))
+
+    if "cel_c" in values:
+        data["battery_soc"] = _to_int(values.get("cel_c"))
+    if "cel_p" in values:
+        data["battery_energy"] = _to_float(values.get("cel_p")) / 100
+    if "cel_s" in values:
+        data["battery_working_status"] = battery_status_map.get(values.get("cel_s") or "", "unknown")
+
+    if "b_vol" in values:
+        data["battery_voltage"] = _to_float(values.get("b_vol")) / 100
+    if "b_cur" in values:
+        data["battery_current"] = _to_float(values.get("b_cur")) / 10
+
+    if "err_t" in values:
+        data["error_code"] = _to_int(values.get("err_t"))
+    if "wor_m" in values:
+        data["working_mode"] = "automatic" if values.get("wor_m") == "1" else "manual"
+    if "wif_s" in values:
+        data["wifi_signal_strength"] = -_to_int(values.get("wif_s"))
+    if "ful_d" in values:
+        data["surplus_feed_in_enabled"] = values.get("ful_d") == "1"
+    if "dod" in values:
+        data["depth_of_discharge"] = _to_int(values.get("dod"))
+    if "ala_c" in values:
+        data["alarm_code"] = _to_int(values.get("ala_c"))
+
+    periods = _parse_jupiter_time_periods(values)
+    if periods:
+        data["time_periods"] = periods
+
+    return data
 
 
 def _parse_jupiter_time_periods(values: dict[str, str]) -> list[dict[str, object]]:
