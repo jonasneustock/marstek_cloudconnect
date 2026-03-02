@@ -1,0 +1,6 @@
+[submodule "hame-relay"]
+	path = hame-relay
+	url = https://github.com/tomquist/hame-relay.git
+[submodule "hm2mqtt"]
+	path = hm2mqtt
+	url = https://github.com/tomquist/hm2mqtt.git

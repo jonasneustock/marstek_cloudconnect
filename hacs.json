@@ -1,0 +1,10 @@
+{
+  "name": "Marstek Cloud Connect",
+  "content_in_root": false,
+  "country": "*",
+  "domains": [
+    "marstek_cloudconnect"
+  ],
+  "homeassistant": "2024.12.0",
+  "render_readme": true
+}

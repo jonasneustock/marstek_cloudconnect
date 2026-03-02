@@ -1,0 +1,20 @@
+{
+  "domain": "marstek_cloudconnect",
+  "name": "Marstek Cloud Connect",
+  "codeowners": [
+    "@jonasn"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/jonasn/hass_hame_connect",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/jonasn/hass_hame_connect/issues",
+  "loggers": [
+    "custom_components.marstek_cloudconnect"
+  ],
+  "requirements": [
+    "paho-mqtt==2.1.0"
+  ],
+  "version": "0.1.0",
+  "homeassistant": "2024.12.0"
+}

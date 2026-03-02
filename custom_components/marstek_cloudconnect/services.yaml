@@ -1,0 +1,21 @@
+refresh:
+  name: Refresh devices
+  description: Refresh all Marstek devices from cloud.
+
+send_command:
+  name: Send command
+  description: Send a direct command to a Marstek device through cloud transport.
+  fields:
+    device_id:
+      required: true
+      selector:
+        text:
+    command:
+      required: true
+      selector:
+        text:
+    value:
+      required: false
+      description: Optional command value. Can be bool/int/string or a JSON object for advanced commands like sync-time and time-period.*
+      selector:
+        text:

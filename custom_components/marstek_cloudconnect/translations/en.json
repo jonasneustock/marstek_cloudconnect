@@ -1,0 +1,121 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Marstek Cloud Connect",
+        "description": "Connect your Marstek cloud account",
+        "data": {
+          "mailbox": "Mailbox",
+          "password": "Password",
+          "base_url": "API Base URL",
+          "enable_transport": "Enable cloud MQTT transport",
+          "broker_url": "Broker URL",
+          "broker_username": "Broker username",
+          "broker_password": "Broker password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Account is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Marstek Cloud Connect Options",
+        "data": {
+          "scan_interval": "Scan interval (seconds)",
+          "enable_transport": "Enable cloud MQTT transport",
+          "broker_url": "Broker URL",
+          "broker_username": "Broker username",
+          "broker_password": "Broker password"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "device_type": {
+        "name": "Device type"
+      },
+      "firmware_version": {
+        "name": "Firmware version"
+      },
+      "remote_topic_id": {
+        "name": "Remote topic ID"
+      },
+      "daily_energy_generated": {
+        "name": "Daily energy generated"
+      },
+      "total_energy_generated": {
+        "name": "Total energy generated"
+      },
+      "combined_power": {
+        "name": "Combined power"
+      },
+      "battery_soc": {
+        "name": "Battery SOC"
+      },
+      "phase1_power": {
+        "name": "Phase 1 power"
+      },
+      "phase2_power": {
+        "name": "Phase 2 power"
+      },
+      "phase3_power": {
+        "name": "Phase 3 power"
+      },
+      "total_power": {
+        "name": "Total power"
+      }
+    },
+    "binary_sensor": {
+      "supports_cq": {
+        "name": "CQ encryption support"
+      },
+      "online": {
+        "name": "Online"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Refresh"
+      },
+      "sync_time": {
+        "name": "Sync time"
+      },
+      "factory_reset": {
+        "name": "Factory reset"
+      }
+    },
+    "number": {
+      "maximum_output_power": {
+        "name": "Maximum output power"
+      },
+      "depth_of_discharge": {
+        "name": "Depth of discharge"
+      }
+    },
+    "select": {
+      "mi800_mode": {
+        "name": "Mode"
+      },
+      "working_mode": {
+        "name": "Working mode"
+      }
+    },
+    "switch": {
+      "grid_connection_ban": {
+        "name": "Grid connection ban"
+      },
+      "surplus_feed_in": {
+        "name": "Surplus feed-in"
+      }
+    }
+  }
+}
