@@ -23,6 +23,7 @@ from .const import (
     HAME2025_CERT_DISCOVERY_ROOTS,
     HAME2025_CERT_SEARCH_DIRS,
     LEGACY_PROFILES_PATHS,
+    PACKAGE_PROFILES_PATH,
 )
 from .models import CloudDevice
 from .parser.command_builder import build_command_payload
@@ -164,7 +165,7 @@ class MarstekCoordinator(DataUpdateCoordinator[dict[str, CloudDevice]]):
             )
         )
 
-        fallbacks = [DEFAULT_PROFILES_PATH, *LEGACY_PROFILES_PATHS]
+        fallbacks = [PACKAGE_PROFILES_PATH, DEFAULT_PROFILES_PATH, *LEGACY_PROFILES_PATHS]
         result = resolve_or_generate_profiles_path(
             configured_path=configured,
             fallback_paths=fallbacks,

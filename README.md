@@ -54,6 +54,7 @@ You can also directly reuse an existing `hame-relay` broker config file (for exa
 The integration supports the same `@file` reference style used there, including `url`, `ca`, `cert`, `key`, and `topic_encryption_key`.
 If the configured path is missing, the integration automatically tries these fallback paths:
 
+- `/config/custom_components/marstek_cloudconnect/broker_profiles.json` (bundled template)
 - `/config/marstek_cloudconnect/broker_profiles.json`
 - `/config/hame-relay/brokers.json`
 - `/config/hame_relay/brokers.json`

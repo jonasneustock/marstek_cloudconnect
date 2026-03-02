@@ -159,3 +159,33 @@ def test_resolve_or_generate_profiles_path_discovers_files_recursively(tmp_path)
     assert result.error is None
     payload = json.loads(Path(result.profiles_path).read_text(encoding="utf-8"))
     assert payload["hame-2025"]["url"] == "mqtts://recursive.example.org:8883"
+
+
+def test_resolve_or_generate_profiles_path_uses_existing_fallback_file(tmp_path) -> None:
+    fallback = tmp_path / "fallback" / "broker_profiles.json"
+    fallback.parent.mkdir(parents=True)
+    fallback.write_text(
+        json.dumps(
+            {
+                "hame-2025": {
+                    "url": "mqtts://fallback.example.org:8883",
+                    "ca_file": "/tmp/ca.crt",
+                    "cert_file": "/tmp/cert.crt",
+                    "key_file": "/tmp/key.key"
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    missing_configured = tmp_path / "missing" / "broker_profiles.json"
+    result = resolve_or_generate_profiles_path(
+        configured_path=str(missing_configured),
+        fallback_paths=[str(fallback)],
+        cert_search_dirs=[],
+        cert_discovery_roots=[],
+    )
+
+    assert result.auto_generated is False
+    assert result.error is None
+    assert result.profiles_path == str(fallback)

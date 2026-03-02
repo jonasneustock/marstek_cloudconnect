@@ -1,0 +1,11 @@
+{
+  "hame-2025": {
+    "url": "@certs/hame-2025-url",
+    "ca": "@certs/ca.crt",
+    "cert": "@certs/hame-2025.crt",
+    "key": "@certs/hame-2025.key",
+    "topic_prefix": "marstek_energy/",
+    "client_id_prefix": "mst_",
+    "topic_encryption_key": "@certs/hame-2025-topic-encryption-key"
+  }
+}
